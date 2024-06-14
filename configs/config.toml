@@ -1,0 +1,27 @@
+[filter_design]
+type = 'butter'
+order = 8
+
+[frequency_bands]
+theta = [5, 8]
+alpha = [8, 13]
+beta = [13, 30]
+gamma = [30, 45]   # stopping at 45 to not deal with notch filter yet
+high_gamma = [45, 70]   
+
+[stream_to_query]
+stream = "AODataStream"   # just one stream here atm
+# stream = "mock_EEG_stream"   # just one stream here atm
+buffer_size_s = 1.5         # buffer size in seconds
+
+# just get the ecog channels
+channels = [17, 18, 19, 20]
+
+[lsl_outlet]
+name = "decoded_ecog"
+nominal_freq_hz = 100          
+format = "float32"
+type = "decoder_output"
+
+[others]
+warm_up_time_s = 1.5     # no signal is forwarded in this time which is used as filter warm-up
