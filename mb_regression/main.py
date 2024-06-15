@@ -19,17 +19,18 @@ def init_lsl_outlet(cfg: dict, fb: FilterBank) -> pylsl.StreamOutlet:
 
     cfg_out = cfg["lsl_outlet"]
 
+    channels = [f"{cn}_{band}" for cn in fb.ch_names for band in fb.zis.keys()]
     info = pylsl.StreamInfo(
         cfg_out["name"],
         cfg_out["type"],
-        len(fb.ch_names) + 1,   # 
+        len(channels) + 1,   # 
         cfg_out["nominal_freq_hz"],
         cfg_out["format"],
     )
 
     # enrich a channel name
     chns = info.desc().append_child("channels")
-    for chn in fb.ch_names + ['model_output']:
+    for chn in channels + ['model_output']:
         ch = chns.append_child("channel")
         ch.append_child_value("label", f"{chn}")
         ch.append_child_value("unit", "AU")
@@ -49,12 +50,14 @@ def process_loop(
     sw = StreamWatcher(
         name=cfg["stream_to_query"]["stream"],
         buffer_size_s=cfg["stream_to_query"]["buffer_size_s"],
+
     )
+    sw.chunk_buffer_size = 1024 * 512    # Increase for pull from LSL
     sw.connect_to_stream()
     # in_sfreq = sw.inlet.info().nominal_srate()
     #
     # Hard coded to 22000 kHz for now using the older dp AO module
-    in_sfreq = 22_000 
+    in_sfreq = 22000 
 
     fb = FilterBank(
         bands=cfg["frequency_bands"],
@@ -65,7 +68,6 @@ def process_loop(
         filter_buffer_s=2,
         n_lookback=int(in_sfreq // 10),   # lookback for moving average 10th of a second like this
     )
-
     model = joblib.load("./configs/model.joblib")
 
     outlet = init_lsl_outlet(cfg, fb)
@@ -88,46 +90,66 @@ def process_loop(
 
     logger.debug("Filter Warmup finished")
 
-    tlast = time.perf_counter_ns()
+    sent_samples = 0
+    start_time = pylsl.local_clock()
+
     while not stop_event.is_set():
-        dt_s = (time.perf_counter_ns() - tlast) * 1e-9
-        req_samples = int(dt_s * out_sfreq)
+
+        dt_s = pylsl.local_clock() - start_time
+
+        req_samples = int(dt_s * out_sfreq) - sent_samples
 
         if req_samples > 1:
             sw.update()
-            tlast = time.perf_counter_ns()
-
             new_data = sw.unfold_buffer()[-sw.n_new :, ch_to_watch]
             new_times = sw.unfold_buffer_t()[-sw.n_new :]
+
             fb.filter(new_data, new_times)
 
-            # we might have additional samples after decimating since we floor
+            # # we might have additional samples after decimating since we floor
             # the frequency fb.sfreq/freq_hz
-            if qfactor > 1:
-                try:
-                    xf = decimate(fb.get_data(), qfactor, axis=0, ftype="fir")[
-                        -req_samples:
-                    ]
-                except Exception as e:
-                    # With iir filter design for decimate this broke often
-                    logger.error(f"Error in decimation: {e}")
-                    breakpoint()
-            else:
-                xf = fb.get_data()[-req_samples:]
+            # if qfactor > 1:
+            #     try:
+            #         # Decimate becomes very slow once a lot of data accumulates
+            #         xf = decimate(fb.get_data(), qfactor, axis=0, ftype="fir")[
+            #             -req_samples:
+            #         ]
 
-            for x in xf:
-                # transform the x (features) to the model
-                xl = np.log10(x)
-                y = model.predict(xl)
+            #         logger.debug(f"Decimation done")
+            #     except Exception as e:
+            #         # With iir filter design for decimate this broke often
+            #         logger.error(f"Error in decimation: {e}")
+            #         breakpoint()
+            # else:
+            #    xf = fb.get_data()[-req_samples:]
+            
+            # How about pushing the mean for n samples? rectified signal?
+            #
+            xf = np.abs(fb.get_data()[-req_samples:]).mean(axis=0).reshape(1, -1)
 
-                # push features and label for reconstruction
-                outlet.push_sample(np.hstack([xl , [y]]))
+            xfl = np.nan_to_num(np.log10(xf)).reshape(xf.shape[0], -1)
+
+            preds = model.predict(xfl)
+
+            data = np.hstack([xfl, preds.reshape(-1, 1)])
+
+            # logger.debug(f"Pushing {len(data)=} samples")
+
+            # outlet.push_chunk(data)
+            for _ in range(req_samples):
+                # Will stack: ch1_band1, ch1_band2, ch1_band3, ..., chn_bandm, prediction
+                # Rectified in samples for now, later maybe chunk and mean per chunk?
+                outlet.push_sample(data[0])
+
+            sent_samples += req_samples
 
             sw.n_new = 0
             fb.n_new = 0
 
+
         else:
-            sleep_s(0.8 * (1 / out_sfreq - dt_s))
+            tsleep = 0.8 * (1 / out_sfreq - dt_s)
+            sleep_s(tsleep)
 
 
 def run_multiband_regression() -> tuple[threading.Thread, threading.Event]:
@@ -147,4 +169,4 @@ def run_multiband_regression() -> tuple[threading.Thread, threading.Event]:
 
 if __name__ == "__main__":
     logger.setLevel(10)
-    Fire(run_bandpass_filter)
+    Fire(run_multiband_regression)
