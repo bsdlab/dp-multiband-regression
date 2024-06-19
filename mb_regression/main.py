@@ -54,6 +54,7 @@ def process_loop(
     )
     sw.chunk_buffer_size = 1024 * 512    # Increase for pull from LSL
     sw.connect_to_stream()
+
     # in_sfreq = sw.inlet.info().nominal_srate()
     #
     # Hard coded to 22000 kHz for now using the older dp AO module
@@ -68,7 +69,8 @@ def process_loop(
         filter_buffer_s=2,
         n_lookback=int(in_sfreq // 10),   # lookback for moving average 10th of a second like this
     )
-    model = joblib.load("./configs/model.joblib")
+    # model = joblib.load("./configs/model.joblib")
+    model = joblib.load("./configs/model_day3.joblib")
 
     outlet = init_lsl_outlet(cfg, fb)
     ch_to_watch = cfg["stream_to_query"]["channels"]
@@ -94,8 +96,9 @@ def process_loop(
     start_time = pylsl.local_clock()
 
     while not stop_event.is_set():
+        cycle_start = pylsl.local_clock()
 
-        dt_s = pylsl.local_clock() - start_time
+        dt_s = cycle_start - start_time
 
         req_samples = int(dt_s * out_sfreq) - sent_samples
 
@@ -133,8 +136,6 @@ def process_loop(
 
             data = np.hstack([xfl, preds.reshape(-1, 1)])
 
-            # logger.debug(f"Pushing {len(data)=} samples")
-
             # outlet.push_chunk(data)
             for _ in range(req_samples):
                 # Will stack: ch1_band1, ch1_band2, ch1_band3, ..., chn_bandm, prediction
@@ -148,8 +149,10 @@ def process_loop(
 
 
         else:
-            tsleep = 0.8 * (1 / out_sfreq - dt_s)
-            sleep_s(tsleep)
+            tsleep = (1 / out_sfreq)
+            # keeping the clock more simple for better resource usage
+            time.sleep(tsleep)
+            # sleep_s(tsleep)
 
 
 def run_multiband_regression() -> tuple[threading.Thread, threading.Event]:

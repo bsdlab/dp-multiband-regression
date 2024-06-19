@@ -20,7 +20,7 @@ channels = [16, 17, 18, 19]
 
 [lsl_outlet]
 name = "decoded_ecog"
-nominal_freq_hz = 30
+nominal_freq_hz = 5
 format = "float32"
 type = "decoder_output"
 
