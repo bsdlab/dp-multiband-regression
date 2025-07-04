@@ -10,10 +10,10 @@ website:
             - reference/index.qmd
 
 quartodoc:
-  package: "multiband-regression" # name of the package
+  package: "mb_regression" # name of the package
   source_dir: "mb_regression" # as the source code is within this folder
 
-  title: "Documentation for the multiband-regression module"
+  title: "Documentation for the dp-multiband-regression module"
 
   options:
     signature_name: full
@@ -30,6 +30,6 @@ quartodoc:
         [https://github.com/bsdlab/dp-multiband-regression](https://github.com/bsdlab/dp-multiband-regression)
         :::
       contents:
-        - main.init_lsl_outlet
-        - main.process_loop
         - main.run_multiband_regression
+        - main.process_loop
+        - main.init_lsl_outlet        
