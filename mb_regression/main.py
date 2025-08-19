@@ -76,7 +76,7 @@ def process_loop(
     ch_to_watch = cfg["stream_to_query"]["channels"]
 
     out_sfreq = cfg["lsl_outlet"]["nominal_freq_hz"]
-    qfactor = max(int(in_sfreq // out_sfreq), 1)
+    # qfactor = max(int(in_sfreq // out_sfreq), 1)
 
     tlast = time.perf_counter_ns()
 
