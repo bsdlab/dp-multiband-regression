@@ -14,7 +14,27 @@ from mb_regression.utils.logging import logger
 
 
 def init_lsl_outlet(cfg: dict, fb: FilterBank) -> pylsl.StreamOutlet:
-    """Initialize the LSL outlet"""
+    """
+    Initialize an LSL (Lab Streaming Layer) outlet for multiband regression data.
+
+    This function creates an LSL outlet that streams filtered multiband data along with
+    model predictions. The outlet includes one channel for each frequency band for each input channel,
+    plus one additional channel for the model output.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary containing LSL outlet settings. Must include
+        an "lsl_outlet" key with name, type, nominal_freq_hz, and format fields.
+    fb : FilterBank
+        Configured FilterBank object containing channel names and frequency band
+        information used to determine the output channel structure.
+
+    Returns
+    -------
+    pylsl.StreamOutlet
+        The LSL outlet for streaming the data.
+    """
 
     cfg_out = cfg["lsl_outlet"]
 
@@ -43,7 +63,20 @@ def init_lsl_outlet(cfg: dict, fb: FilterBank) -> pylsl.StreamOutlet:
 def process_loop(
     stop_event: threading.Event = threading.Event(),
 ):
-    """Process the given pipeline in a loop with a given freq"""
+    """
+    Processing loop for the multiband regression pipeline.
+
+    This function implements the main processing loop for real-time multiband regression.
+    It connects to an LSL input stream, applies filtering using the bands set in the config,
+    computes predictions using a trained model, and streams the results via LSL output.
+    The configuration is loaded from the "./configs/config.toml" file.
+
+    Parameters
+    ----------
+    stop_event : threading.Event, optional
+        Threading event to signal when processing should stop. Default creates
+        a new Event object.
+    """
 
     cfg = tomli.load(open("./configs/config.toml", "rb"))
     sw = StreamWatcher(
@@ -53,10 +86,7 @@ def process_loop(
     sw.chunk_buffer_size = 1024 * 512  # Increase for pull from LSL
     sw.connect_to_stream()
 
-    # in_sfreq = sw.inlet.info().nominal_srate()
-    #
-    # Hard coded to 22000 kHz for now using the older dp AO module
-    in_sfreq = 22000
+    in_sfreq = sw.inlet.info().nominal_srate()
 
     fb = FilterBank(
         bands=cfg["frequency_bands"],
@@ -153,6 +183,19 @@ def process_loop(
 
 
 def run_multiband_regression() -> tuple[threading.Thread, threading.Event]:
+    """
+    Main function to run the multiband regression processing in a separate thread.
+
+    This function creates and starts a background thread that runs the process_loop.
+    It also allows the regression loop to be stopped via the returned Event object.
+
+    Returns
+    -------
+    tuple[threading.Thread, threading.Event]
+        A tuple containing:
+        - threading.Thread: The thread object running the processing loop
+        - threading.Event: Event object that can be .set() to stop the processing
+    """
     stop_event = threading.Event()
     stop_event.clear()
 
