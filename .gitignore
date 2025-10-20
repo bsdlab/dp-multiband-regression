@@ -154,3 +154,9 @@ cython_debug/
 
 .idea/
 ._*
+
+# Documentation
+/.quarto/
+reference/
+objects.json
+_site/
