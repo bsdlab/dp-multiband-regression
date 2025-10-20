@@ -1,16 +1,15 @@
-import numpy as np
-import joblib
 import threading
 import time
 
+import joblib
+import numpy as np
 import pylsl
 import tomli
 from dareplane_utils.general.time import sleep_s
+from dareplane_utils.signal_processing.filtering import FilterBank
 from dareplane_utils.stream_watcher.lsl_stream_watcher import StreamWatcher
 from fire import Fire
-from scipy.signal import decimate
 
-from dareplane_utils.signal_processing.filtering import FilterBank
 from mb_regression.utils.logging import logger
 
 
@@ -43,14 +42,14 @@ def init_lsl_outlet(cfg: dict, fb: FilterBank) -> pylsl.StreamOutlet:
     info = pylsl.StreamInfo(
         cfg_out["name"],
         cfg_out["type"],
-        len(channels) + 1,   # 
+        len(channels) + 1,  #
         cfg_out["nominal_freq_hz"],
         cfg_out["format"],
     )
 
     # enrich a channel name
     chns = info.desc().append_child("channels")
-    for chn in channels + ['model_output']:
+    for chn in channels + ["model_output"]:
         ch = chns.append_child("channel")
         ch.append_child_value("label", f"{chn}")
         ch.append_child_value("unit", "AU")
@@ -83,9 +82,8 @@ def process_loop(
     sw = StreamWatcher(
         name=cfg["stream_to_query"]["stream"],
         buffer_size_s=cfg["stream_to_query"]["buffer_size_s"],
-
     )
-    sw.chunk_buffer_size = 1024 * 512    # Increase for pull from LSL
+    sw.chunk_buffer_size = 1024 * 512  # Increase for pull from LSL
     sw.connect_to_stream()
 
     in_sfreq = sw.inlet.info().nominal_srate()
@@ -97,7 +95,9 @@ def process_loop(
         # output="abs_ma",
         output="signal",
         filter_buffer_s=2,
-        n_lookback=int(in_sfreq // 10),   # lookback for moving average 10th of a second like this
+        n_lookback=int(
+            in_sfreq // 10
+        ),  # lookback for moving average 10th of a second like this
     )
     # model = joblib.load("./configs/model.joblib")
     model = joblib.load("./configs/model_day3.joblib")
@@ -106,14 +106,12 @@ def process_loop(
     ch_to_watch = cfg["stream_to_query"]["channels"]
 
     out_sfreq = cfg["lsl_outlet"]["nominal_freq_hz"]
-    qfactor = max(int(in_sfreq // out_sfreq), 1)
+    # qfactor = max(int(in_sfreq // out_sfreq), 1)
 
     tlast = time.perf_counter_ns()
 
     # Warmup
-    while (time.perf_counter_ns() - tlast) * 1e-9 < cfg["others"][
-        "warm_up_time_s"
-    ]:
+    while (time.perf_counter_ns() - tlast) * 1e-9 < cfg["others"]["warm_up_time_s"]:
         sleep_s(0.1)
         sw.update()
         new_data = sw.unfold_buffer()[-sw.n_new :, ch_to_watch]
@@ -155,7 +153,7 @@ def process_loop(
             #         breakpoint()
             # else:
             #    xf = fb.get_data()[-req_samples:]
-            
+
             # How about pushing the mean for n samples? rectified signal?
             #
             xf = np.abs(fb.get_data()[-req_samples:]).mean(axis=0).reshape(1, -1)
@@ -177,9 +175,8 @@ def process_loop(
             sw.n_new = 0
             fb.n_new = 0
 
-
         else:
-            tsleep = (1 / out_sfreq)
+            tsleep = 1 / out_sfreq
             # keeping the clock more simple for better resource usage
             time.sleep(tsleep)
             # sleep_s(tsleep)
