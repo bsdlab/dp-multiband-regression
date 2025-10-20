@@ -55,10 +55,7 @@ def process_loop(
     sw.chunk_buffer_size = 1024 * 512    # Increase for pull from LSL
     sw.connect_to_stream()
 
-    # in_sfreq = sw.inlet.info().nominal_srate()
-    #
-    # Hard coded to 22000 kHz for now using the older dp AO module
-    in_sfreq = 22000 
+    in_sfreq = sw.inlet.info().nominal_srate()
 
     fb = FilterBank(
         bands=cfg["frequency_bands"],
